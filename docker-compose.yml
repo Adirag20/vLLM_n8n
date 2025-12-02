@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  vllm-proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: vllm-proxy
+    environment:
+      # Set these to point at your real vLLM/Gwen endpoint
+      TARGET_HOST: "192.168.28.137"
+      TARGET_PORT: "11458"
+      # Optional: set a PROXY_API_KEY to require Authorization header
+      # PROXY_API_KEY: "super-secret-key"
+    ports:
+      - "11458:11458"
+    restart: unless-stopped
+
+  # OPTIONAL: run n8n in the same compose network so it can reach the proxy by service name.
+  # Uncomment if you want n8n here.
+  #
+  # n8n:
+  #   image: n8nio/n8n:latest
+  #   container_name: n8n
+  #   environment:
+  #     - N8N_BASIC_AUTH_ACTIVE=false
+  #     # If you want n8n to call the proxy by service name inside the network, use http://vllm-proxy:11458/v1/generate
+  #   ports:
+  #     - "5678:5678"
+  #   depends_on:
+  #     - vllm-proxy
+  #   restart: unless-stopped
