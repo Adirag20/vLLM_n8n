@@ -1,0 +1,129 @@
+{
+  "name": "AI Agent Node - Keypoint Extractor (custom LLM)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 240]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "chunk",
+              "value": "{\n  \"id\": \"sample-1\",\n  \"text\": \"Paste your JSON chunk text here. Example: {\\\"title\\\":\\\"Report\\\", \\\"body\\\":\\\"Long text...\\\" }\"\n            }"
+            },
+            {
+              "name": "agentPrompt",
+              "value": "Extract concise key points and their values from the provided text. Return ONLY valid JSON: an array of objects with keys \\\"key\\\" and \\\"value\\\". Example: [{\\\"key\\\":\\\"Title\\\",\\\"value\\\":\\\"Report\\\"}]. Do not include any commentary."
+            }
+          ]
+        }
+      },
+      "name": "Set Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [480, 240]
+    },
+    {
+      "parameters": {
+        "agentId": "",
+        "prompt": "{{$json[\"agentPrompt\"]}}\n\nCHUNK:\n{{$json[\"chunk\"]}}\n\nIMPORTANT: Return only JSON (an array or object). No explanation, no markdown.",
+        "model": "custom",
+        "connectionMode": "tools",
+        "tools": [
+          {
+            "module": "HTTP Request Tool",
+            "options": {
+              "name": "call_llm",
+              "url": "http://192.168.28.137:11458/v1/generate",
+              "method": "POST",
+              "jsonParameters": false,
+              "body": "{\"prompt\":\"{{$input.prompt}}\",\"max_tokens\":600,\"temperature\":0,\"top_p\":0.9}",
+              "headers": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "responseProperty": "response",
+              "description": "Calls local vLLM/Gwen endpoint"
+            }
+          }
+        ],
+        "options": {}
+      },
+      "name": "AI Agent",
+      "type": "n8n-nodes-base.agent",
+      "typeVersion": 1,
+      "position": [820, 240]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Parse the Agent's tool response (string) and extract first JSON object/array */\nconst raw = $json.response || '';\nlet text = '';\nif (typeof raw === 'string') text = raw;\nelse if (raw.output && typeof raw.output === 'string') text = raw.output;\nelse text = JSON.stringify(raw);\n\nlet extracted;\ntry {\n  const m = text.match(/(\\{[\\s\\S]*\\}|\\[[\\s\\S]*\\])/);\n  const candidate = m ? m[1] : text;\n  extracted = JSON.parse(candidate);\n} catch (err) {\n  extracted = { parse_error: err.message, raw: text };\n}\n\nreturn [{ json: { extracted } }];"
+      },
+      "name": "Parse Model Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 240]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Final output: include original chunk and parsed extraction */\nreturn [{ json: { originalChunk: $node[\"Set Input\"].json.chunk, extracted: $node[\"Parse Model Output\"].json.extracted } }];"
+      },
+      "name": "Return Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1400, 240]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Model Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Model Output": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
